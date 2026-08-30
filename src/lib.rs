@@ -1,0 +1,95 @@
+use axum::{
+    Router,
+    extract::Form,
+    response::Html,
+    routing::{get, post},
+};
+use reqwest::Client;
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+pub struct LoincInput {
+    pub code: String,
+}
+
+pub async fn index_handler() -> Html<&'static str> {
+    Html(include_str!("../templates/index.html"))
+}
+
+pub async fn validate_handler(Form(input): Form<LoincInput>) -> Html<String> {
+    let code = input.code.trim();
+
+    if code.is_empty() {
+        return Html(error("Please enter a valid LOINC code input."));
+    }
+
+    let url = format!(
+        "https://clinicaltables.nlm.nih.gov/api/loinc_items/v3/search?sf=LOINC_NUM&df=LOINC_NUM,text&terms={}",
+        code
+    );
+
+    let client = Client::new();
+    let response = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(_) => return Html(error("Network error contacting NLM API.")),
+    };
+
+    let data: serde_json::Value = match response.json().await {
+        Ok(v) => v,
+        Err(_) => return Html(error("Failed to parse API response.")),
+    };
+
+    let count = data.get(0).and_then(|v| v.as_i64()).unwrap_or(0);
+
+    if count == 0 {
+        return Html(invalid(code));
+    }
+
+    let items = match data.get(3).and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return Html(invalid(code)),
+    };
+
+    let first = match items.first().and_then(|v| v.as_array()) {
+        Some(f) => f,
+        None => return Html(invalid(code)),
+    };
+
+    let loinc_num = first.first().and_then(|v| v.as_str()).unwrap_or(code);
+    let loinc_name = first
+        .get(1)
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown Description");
+
+    Html(valid(loinc_num, loinc_name))
+}
+
+pub fn error(msg: &str) -> String {
+    format!("<p class='text-red-600 font-medium'>{}</p>", msg)
+}
+
+pub fn invalid(code: &str) -> String {
+    format!(
+        "<div class='p-3 bg-red-50 border border-red-200 rounded-md text-red-800'>
+            <p class='font-bold'>Invalid Code</p>
+            <p class='text-sm mt-1'>Code '{}' was not found in the NLM database.</p>
+        </div>",
+        code
+    )
+}
+
+pub fn valid(num: &str, name: &str) -> String {
+    format!(
+        "<div class='p-3 bg-green-50 border border-green-200 rounded-md text-green-800'>
+            <p class='font-bold'>Valid LOINC Code: {}</p>
+            <p class='text-sm mt-1'>Description: {}</p>
+        </div>",
+        num, name
+    )
+}
+
+pub fn app() -> Router {
+    Router::new()
+        .route("/", get(index_handler))
+        .route("/validate", post(validate_handler))
+}
