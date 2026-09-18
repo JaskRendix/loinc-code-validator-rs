@@ -4,8 +4,17 @@ use axum::{
     response::Html,
     routing::{get, post},
 };
+use moka::future::Cache;
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::Deserialize;
+
+static CACHE: Lazy<Cache<String, serde_json::Value>> = Lazy::new(|| {
+    Cache::builder()
+        .max_capacity(10_000)
+        .time_to_live(std::time::Duration::from_secs(60 * 60)) // 1 hour
+        .build()
+});
 
 #[derive(Deserialize)]
 pub struct LoincInput {
@@ -29,6 +38,13 @@ pub async fn validate_handler(Form(input): Form<LoincInput>) -> Html<String> {
     );
 
     let client = Client::new();
+
+    // Try cache first
+    if let Some(cached) = CACHE.get(&code.to_string()).await {
+        return process_loinc_response(code, cached);
+    }
+
+    // Otherwise hit NIH
     let response = match client.get(&url).send().await {
         Ok(r) => r,
         Err(_) => return Html(error("Network error contacting NLM API.")),
@@ -39,6 +55,13 @@ pub async fn validate_handler(Form(input): Form<LoincInput>) -> Html<String> {
         Err(_) => return Html(error("Failed to parse API response.")),
     };
 
+    // Store in cache
+    CACHE.insert(code.to_string(), data.clone()).await;
+
+    process_loinc_response(code, data)
+}
+
+fn process_loinc_response(code: &str, data: serde_json::Value) -> Html<String> {
     let count = data.get(0).and_then(|v| v.as_i64()).unwrap_or(0);
 
     if count == 0 {
