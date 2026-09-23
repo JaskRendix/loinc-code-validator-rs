@@ -107,7 +107,7 @@ async fn test_invalid_codes() {
             .unwrap();
 
         let html = String::from_utf8_lossy(&bytes);
-        assert!(html.contains("Invalid Code"));
+        assert!(html.contains("Invalid LOINC format"));
     }
 }
 
@@ -169,4 +169,66 @@ async fn test_whitespace_input() {
 
     let html = String::from_utf8_lossy(&bytes);
     assert!(html.contains("Please enter a valid LOINC code input."));
+}
+
+#[tokio::test]
+async fn test_strict_format_rejection_edge_cases() {
+    let mut app = build_test_app("http://localhost:0".to_string());
+
+    let bad_formats = vec!["123", "12-34", "123456-7"];
+
+    for code in bad_formats {
+        let body = format!("code={}", code);
+        let req = Request::builder()
+            .method("POST")
+            .uri("/validate")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let res = app.call(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(html.contains("Invalid LOINC format"));
+    }
+}
+
+#[tokio::test]
+async fn test_mocked_valid_format_but_not_found() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/api/loinc_items/v3/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            0,
+            [],
+            null,
+            []
+        ])))
+        .mount(&server)
+        .await;
+
+    let mut app = build_test_app(server.uri());
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/validate")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(Body::from("code=9999-9"))
+        .unwrap();
+
+    let res = app.call(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+
+    let html = String::from_utf8_lossy(&bytes);
+    assert!(html.contains("Invalid Code"));
 }

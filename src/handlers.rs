@@ -15,6 +15,14 @@ static CACHE: Lazy<Cache<String, serde_json::Value>> = Lazy::new(|| {
 });
 
 #[derive(Deserialize)]
+pub struct NlmLoincResponse(
+    pub usize,                     // count
+    pub Vec<String>,               // codes
+    pub Option<serde_json::Value>, // extra metadata
+    pub Vec<(String, String)>,     // pairs of (LOINC_NUM, Description)
+);
+
+#[derive(Deserialize)]
 pub struct LoincInput {
     pub code: String,
 }
@@ -29,6 +37,22 @@ pub async fn index_handler() -> Html<&'static str> {
     Html(include_str!("../templates/index.html"))
 }
 
+fn is_valid_loinc_format(code: &str) -> bool {
+    let parts: Vec<&str> = code.split('-').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let num_part = parts[0];
+    let check_part = parts[1];
+
+    // LOINC rules: 1 to 5 digits before the hyphen, exactly 1 digit after
+    !num_part.is_empty()
+        && num_part.len() <= 5
+        && num_part.chars().all(|c| c.is_ascii_digit())
+        && check_part.len() == 1
+        && check_part.chars().all(|c| c.is_ascii_digit())
+}
+
 pub async fn validate_handler(
     State(state): State<AppState>,
     Form(input): Form<LoincInput>,
@@ -37,6 +61,10 @@ pub async fn validate_handler(
 
     if code.is_empty() {
         return Err(LoincError::EmptyInput);
+    }
+
+    if !is_valid_loinc_format(code) {
+        return Err(LoincError::InvalidFormat);
     }
 
     let url = format!(
@@ -60,29 +88,17 @@ pub async fn validate_handler(
 }
 
 fn process_loinc_response(code: &str, data: serde_json::Value) -> Result<Html<String>, LoincError> {
-    let count = data.get(0).and_then(|v| v.as_i64()).unwrap_or(0);
+    let response: NlmLoincResponse = serde_json::from_value(data)?;
 
-    if count == 0 {
+    if response.0 == 0 {
         return Err(LoincError::NotFound(code.to_string()));
     }
 
-    let items = data
-        .get(3)
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| LoincError::NotFound(code.to_string()))?;
-
-    let first = items
-        .first()
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| LoincError::NotFound(code.to_string()))?;
-
-    let loinc_num = first.first().and_then(|v| v.as_str()).unwrap_or(code);
-    let loinc_name = first
-        .get(1)
-        .and_then(|v| v.as_str())
-        .unwrap_or("Unknown Description");
-
-    Ok(Html(valid(loinc_num, loinc_name)))
+    if let Some((num, name)) = response.3.first() {
+        Ok(Html(valid(num, name)))
+    } else {
+        Err(LoincError::NotFound(code.to_string()))
+    }
 }
 
 fn valid(num: &str, name: &str) -> String {

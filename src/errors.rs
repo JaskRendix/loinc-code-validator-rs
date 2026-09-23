@@ -9,6 +9,9 @@ pub enum LoincError {
     #[error("Please enter a valid LOINC code input.")]
     EmptyInput,
 
+    #[error("Invalid LOINC format. Expected formats like '4544-3' or '10154-3'.")]
+    InvalidFormat,
+
     #[error("Network error contacting NLM API.")]
     Network(#[from] reqwest::Error),
 
@@ -24,6 +27,10 @@ impl IntoResponse for LoincError {
         let html_content = match self {
             LoincError::EmptyInput => include_str!("../templates/error_empty.html")
                 .replace("{message}", &self.to_string()),
+
+            LoincError::InvalidFormat => include_str!("../templates/error_empty.html")
+                .replace("{message}", &self.to_string()),
+
             LoincError::NotFound(ref code) => {
                 include_str!("../templates/error_not_found.html").replace("{code}", code)
             }
