@@ -22,27 +22,13 @@ pub enum LoincError {
 impl IntoResponse for LoincError {
     fn into_response(self) -> Response {
         let html_content = match self {
-            LoincError::EmptyInput => {
-                format!("<p class='text-red-600 font-medium'>{}</p>", self)
-            }
+            LoincError::EmptyInput => include_str!("../templates/error_empty.html")
+                .replace("{message}", &self.to_string()),
             LoincError::NotFound(ref code) => {
-                format!(
-                    "<div class='p-3 bg-red-50 border border-red-200 rounded-md text-red-800'>
-                        <p class='font-bold'>Invalid Code</p>
-                        <p class='text-sm mt-1'>Code '{}' was not found in the NLM database.</p>
-                    </div>",
-                    code
-                )
+                include_str!("../templates/error_not_found.html").replace("{code}", code)
             }
-            _ => {
-                format!(
-                    "<div class='p-3 bg-red-50 border border-red-200 rounded-md text-red-800'>
-                        <p class='font-bold'>Error</p>
-                        <p class='text-sm mt-1'>{}</p>
-                    </div>",
-                    self
-                )
-            }
+            _ => include_str!("../templates/error_generic.html")
+                .replace("{message}", &self.to_string()),
         };
         Html(html_content).into_response()
     }

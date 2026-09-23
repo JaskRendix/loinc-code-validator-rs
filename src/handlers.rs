@@ -86,11 +86,7 @@ fn process_loinc_response(code: &str, data: serde_json::Value) -> Result<Html<St
 }
 
 fn valid(num: &str, name: &str) -> String {
-    format!(
-        "<div class='p-3 bg-green-50 border border-green-200 rounded-md text-green-800'>
-            <p class='font-bold'>Valid LOINC Code: {}</p>
-            <p class='text-sm mt-1'>Description: {}</p>
-        </div>",
-        num, name
-    )
+    include_str!("../templates/valid.html")
+        .replace("{num}", num)
+        .replace("{name}", name)
 }
