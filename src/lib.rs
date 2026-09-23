@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    extract::Form,
+    extract::{Form, State},
     response::Html,
     routing::{get, post},
 };
@@ -21,11 +21,20 @@ pub struct LoincInput {
     pub code: String,
 }
 
+#[derive(Clone)]
+pub struct AppState {
+    pub api_base_url: String,
+    pub client: Client,
+}
+
 pub async fn index_handler() -> Html<&'static str> {
     Html(include_str!("../templates/index.html"))
 }
 
-pub async fn validate_handler(Form(input): Form<LoincInput>) -> Html<String> {
+pub async fn validate_handler(
+    State(state): State<AppState>,
+    Form(input): Form<LoincInput>,
+) -> Html<String> {
     let code = input.code.trim();
 
     if code.is_empty() {
@@ -33,19 +42,17 @@ pub async fn validate_handler(Form(input): Form<LoincInput>) -> Html<String> {
     }
 
     let url = format!(
-        "https://clinicaltables.nlm.nih.gov/api/loinc_items/v3/search?sf=LOINC_NUM&df=LOINC_NUM,text&terms={}",
-        code
+        "{}/api/loinc_items/v3/search?sf=LOINC_NUM&df=LOINC_NUM,text&terms={}",
+        state.api_base_url, code
     );
-
-    let client = Client::new();
 
     // Try cache first
     if let Some(cached) = CACHE.get(&code.to_string()).await {
         return process_loinc_response(code, cached);
     }
 
-    // Otherwise hit NIH
-    let response = match client.get(&url).send().await {
+    // Otherwise hit NIH using the shared state client
+    let response = match state.client.get(&url).send().await {
         Ok(r) => r,
         Err(_) => return Html(error("Network error contacting NLM API.")),
     };
@@ -112,7 +119,14 @@ pub fn valid(num: &str, name: &str) -> String {
 }
 
 pub fn app() -> Router {
+    let state = AppState {
+        api_base_url: std::env::var("NIH_API_BASE")
+            .unwrap_or_else(|_| "https://clinicaltables.nlm.nih.gov".to_string()),
+        client: Client::new(),
+    };
+
     Router::new()
         .route("/", get(index_handler))
         .route("/validate", post(validate_handler))
+        .with_state(state)
 }
