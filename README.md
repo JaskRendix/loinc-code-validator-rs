@@ -48,10 +48,8 @@ Prototype vibes, not production vibes:
 - Tests hit the live API, so they wobble  
 - No real validation layer (everything goes straight to the API)  
 - Logic, API calls, and HTML are all glued together  
-- No caching  
 - No template engine (just `include_str!`)  
-- Only handles one code at a time  
-- Error handling is shallow — everything kinda collapses into "invalid"
+- Only handles one code at a time
 
 Good enough for a small demo. Not something you'd ship to a hospital.
 
