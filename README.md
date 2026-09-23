@@ -36,18 +36,16 @@ Everything stays server‑side. No SPA, no JS build chain.
 - Backend is tiny and easy to reason about  
 - Axum routing is straight to the point  
 - HTMX keeps the UI chill and server‑side  
-- Typed structs mean no JSON guessing games  
-- Ships as one binary, no circus  
-- Tests hit the usual edge cases  
-- CI keeps things reproducible enough for a demo
+- Strongly-typed NLM response structs eliminate JSON guessing games  
+- Strict format validation guards prevent bad inputs from hitting the API  
+- HTML templates are separated into dedicated files (`templates/`)  
+- Ships as one binary with robust error handling and production-grade startup  
+- Isolated WireMock tests keep the test suite fast and reliable
 
 ### **Limitations**
 Prototype vibes, not production vibes:
 
 - Fully depends on the NIH API being awake  
-- Tests hit the live API, so they wobble  
-- No real validation layer (everything goes straight to the API)  
-- Logic, API calls, and HTML are all glued together  
 - No template engine (just `include_str!`)  
 - Only handles one code at a time
 
