@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
     routing::{get, post},
 };
-use loinc_code_validator_rs::{AppState, index_handler, validate_handler};
+use loinc_code_validator_rs::handlers::{AppState, index_handler, validate_handler};
 use tower::Service;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
